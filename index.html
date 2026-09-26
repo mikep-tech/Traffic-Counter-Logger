@@ -31,7 +31,10 @@
       <option value="Pickup">Pickup</option>
     </select>
     
-    <!-- Deployment ID View -->
+    <label>Station #</label>
+    <input type="text" id="stationNum" placeholder="e.g. ST-101">
+
+    <!-- Deployment Counter View -->
     <div id="deployCounterGroup">
       <label>Barcode / Counter ID</label>
       <div style="display: flex; gap: 8px;">
@@ -48,9 +51,6 @@
         <option value="">-- Choose Deployed Counter --</option>
       </select>
     </div>
-
-    <label>Station #</label>
-    <input type="text" id="stationNum" placeholder="e.g. ST-101">
 
     <!-- Dynamic Pickup Counts -->
     <div id="countsContainer" class="count-grid" style="display: none; margin-top: 8px;">
@@ -123,7 +123,6 @@
       const select = document.getElementById('activeCounterSelect');
       select.innerHTML = '<option value="">-- Choose Deployed Counter --</option>';
 
-      // Find all records that haven't been picked up yet
       logs.forEach((item, index) => {
         if (item.status === 'Deployed') {
           const opt = document.createElement('option');
@@ -206,7 +205,6 @@
           return;
         }
 
-        // Update existing deployment row
         logs[selectIndex].status = 'Completed';
         logs[selectIndex].pickupTime = timestamp;
         logs[selectIndex].count24 = count24 || 0;
@@ -219,7 +217,6 @@
 
       localStorage.setItem('counter_logs', JSON.stringify(logs));
 
-      // Clear Form Inputs
       document.getElementById('stationNum').value = '';
       document.getElementById('counterId').value = '';
       document.getElementById('count24').value = '';
@@ -271,7 +268,6 @@
       }
     }
 
-    // Initialize state on page load
     updateCounts();
     handleActionChange();
   </script>
