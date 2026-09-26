@@ -17,31 +17,42 @@
     .btn-secondary { background: #e2e8f0; color: #2d3748; }
     #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-top: 8px; }
     .count-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .badge { background: #ebf8ff; color: #2b6cb0; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
   </style>
 </head>
 <body>
 
   <div class="card">
     <h2>Counter Data Entry</h2>
+
+    <label>Action Type</label>
+    <select id="actionType" onchange="handleActionChange()">
+      <option value="Deployment">Deployment</option>
+      <option value="Pickup">Pickup</option>
+    </select>
     
+    <!-- Deployment ID View -->
+    <div id="deployCounterGroup">
+      <label>Barcode / Counter ID</label>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="counterId" placeholder="Scan or enter ID">
+        <button class="btn-secondary" style="width: auto; margin: 0;" onclick="toggleScanner()">📷 Scan</button>
+      </div>
+      <div id="reader" style="display:none;"></div>
+    </div>
+
+    <!-- Pickup Dropdown View -->
+    <div id="pickupCounterGroup" style="display: none;">
+      <label>Select Active Deployment</label>
+      <select id="activeCounterSelect" onchange="autoFillPickupFields()">
+        <option value="">-- Choose Deployed Counter --</option>
+      </select>
+    </div>
+
     <label>Station #</label>
     <input type="text" id="stationNum" placeholder="e.g. ST-101">
 
-    <label>Barcode / Counter ID</label>
-    <div style="display: flex; gap: 8px;">
-      <input type="text" id="counterId" placeholder="Scan or enter ID">
-      <button class="btn-secondary" style="width: auto; margin: 0;" onclick="toggleScanner()">📷 Scan</button>
-    </div>
-    <div id="reader" style="display:none;"></div>
-
-    <label>Action Type</label>
-    <select id="actionType" onchange="toggleCountInputs()">
-      <option value="Deployment">Deployment</option>
-      <option value="Pickup">Pickup</option>
-      <option value="Mid-week Check">Mid-week Check</option>
-    </select>
-
-    <!-- Dynamic Count Inputs -->
+    <!-- Dynamic Pickup Counts -->
     <div id="countsContainer" class="count-grid" style="display: none; margin-top: 8px;">
       <div>
         <label>24-Hr Count</label>
@@ -56,11 +67,12 @@
     <label>Notes / Site Description</label>
     <input type="text" id="notes" placeholder="e.g. Northbound lane near main intersection">
 
-    <button class="btn-primary" onclick="logEntry()">Save Record</button>
+    <button class="btn-primary" id="saveBtn" onclick="logEntry()">Save Deployment</button>
   </div>
 
   <div class="card">
     <h2>Weekly Summary (<span id="recordCount">0</span> records)</h2>
+    <p style="font-size: 0.85rem; color: #718096;">Active Deployments in Field: <span id="activeCount" class="badge">0</span></p>
     <button class="btn-success" onclick="exportToCSV()">Export CSV Spreadsheet</button>
     <button class="btn-secondary" onclick="clearData()">Clear All Data</button>
   </div>
@@ -84,86 +96,148 @@
       }
     }
 
-    function toggleCountInputs() {
+    function handleActionChange() {
       const action = document.getElementById('actionType').value;
+      const deployGrp = document.getElementById('deployCounterGroup');
+      const pickupGrp = document.getElementById('pickupCounterGroup');
       const countsContainer = document.getElementById('countsContainer');
-      
+      const saveBtn = document.getElementById('saveBtn');
+
       if (action === 'Deployment') {
+        deployGrp.style.display = 'block';
+        pickupGrp.style.display = 'none';
         countsContainer.style.display = 'none';
+        saveBtn.innerText = 'Save Deployment';
+        document.getElementById('stationNum').readOnly = false;
       } else {
+        deployGrp.style.display = 'none';
+        pickupGrp.style.display = 'block';
         countsContainer.style.display = 'grid';
+        saveBtn.innerText = 'Save Pickup & Update Row';
+        populateActiveDropdown();
+      }
+    }
+
+    function populateActiveDropdown() {
+      const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      const select = document.getElementById('activeCounterSelect');
+      select.innerHTML = '<option value="">-- Choose Deployed Counter --</option>';
+
+      // Find all records that haven't been picked up yet
+      logs.forEach((item, index) => {
+        if (item.status === 'Deployed') {
+          const opt = document.createElement('option');
+          opt.value = index;
+          opt.innerText = `Station: ${item.station} | Counter: ${item.id}`;
+          select.appendChild(opt);
+        }
+      });
+    }
+
+    function autoFillPickupFields() {
+      const selectIndex = document.getElementById('activeCounterSelect').value;
+      if (selectIndex === "") return;
+
+      const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      const record = logs[selectIndex];
+
+      if (record) {
+        document.getElementById('stationNum').value = record.station;
+        document.getElementById('stationNum').readOnly = true;
       }
     }
 
     function logEntry() {
-      const stationNum = document.getElementById('stationNum').value;
-      const counterId = document.getElementById('counterId').value;
       const actionType = document.getElementById('actionType').value;
-      const count24 = document.getElementById('count24').value;
-      const count48 = document.getElementById('count48').value;
       const notes = document.getElementById('notes').value;
 
-      if (!stationNum) {
-        alert("Please enter a Station #.");
-        return;
-      }
-
-      if (!counterId) {
-        alert("Please enter or scan a Counter ID.");
-        return;
-      }
-
-      // Fetch GPS Location
       if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(
-          (position) => {
-            saveRecord(stationNum, counterId, actionType, count24, count48, notes, position.coords.latitude, position.coords.longitude);
-          },
-          (error) => {
-            alert("GPS location unavailable or denied. Saving record without coordinates.");
-            saveRecord(stationNum, counterId, actionType, count24, count48, notes, "", "");
-          },
+          (position) => { processSave(actionType, notes, position.coords.latitude, position.coords.longitude); },
+          (error) => { processSave(actionType, notes, "", ""); },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } else {
-        saveRecord(stationNum, counterId, actionType, count24, count48, notes, "", "");
+        processSave(actionType, notes, "", "");
       }
     }
 
-    function saveRecord(station, id, action, c24, c48, notes, lat, lng) {
+    function processSave(actionType, notes, lat, lng) {
+      let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
       const timestamp = new Date().toLocaleString();
       const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : "";
 
-      const record = { 
-        timestamp, 
-        station,
-        id, 
-        action, 
-        count24: action === 'Deployment' ? '' : (c24 || 0), 
-        count48: action === 'Deployment' ? '' : (c48 || 0), 
-        lat, 
-        lng, 
-        mapsUrl, 
-        notes 
-      };
+      if (actionType === 'Deployment') {
+        const stationNum = document.getElementById('stationNum').value;
+        const counterId = document.getElementById('counterId').value;
 
-      let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
-      logs.push(record);
+        if (!stationNum || !counterId) {
+          alert("Please fill in both Station # and Counter ID.");
+          return;
+        }
+
+        const newRecord = {
+          status: 'Deployed',
+          station: stationNum,
+          id: counterId,
+          deployTime: timestamp,
+          deployLat: lat,
+          deployLng: lng,
+          deployMapsUrl: mapsUrl,
+          deployNotes: notes,
+          pickupTime: '',
+          count24: '',
+          count48: '',
+          pickupLat: '',
+          pickupLng: '',
+          pickupMapsUrl: '',
+          pickupNotes: ''
+        };
+
+        logs.push(newRecord);
+
+      } else if (actionType === 'Pickup') {
+        const selectIndex = document.getElementById('activeCounterSelect').value;
+        const count24 = document.getElementById('count24').value;
+        const count48 = document.getElementById('count48').value;
+
+        if (selectIndex === "") {
+          alert("Please select a counter to pick up.");
+          return;
+        }
+
+        // Update existing deployment row
+        logs[selectIndex].status = 'Completed';
+        logs[selectIndex].pickupTime = timestamp;
+        logs[selectIndex].count24 = count24 || 0;
+        logs[selectIndex].count48 = count48 || 0;
+        logs[selectIndex].pickupLat = lat;
+        logs[selectIndex].pickupLng = lng;
+        logs[selectIndex].pickupMapsUrl = mapsUrl;
+        logs[selectIndex].pickupNotes = notes;
+      }
+
       localStorage.setItem('counter_logs', JSON.stringify(logs));
 
-      // Reset Form
+      // Clear Form Inputs
       document.getElementById('stationNum').value = '';
       document.getElementById('counterId').value = '';
       document.getElementById('count24').value = '';
       document.getElementById('count48').value = '';
       document.getElementById('notes').value = '';
-      updateCount();
-      alert("Entry saved successfully!");
+      document.getElementById('stationNum').readOnly = false;
+
+      updateCounts();
+      if (actionType === 'Pickup') populateActiveDropdown();
+      alert("Record saved successfully!");
     }
 
-    function updateCount() {
+    function updateCounts() {
       const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
       document.getElementById('recordCount').innerText = logs.length;
+      
+      const activeCount = logs.filter(row => row.status === 'Deployed').length;
+      document.getElementById('activeCount').innerText = activeCount;
     }
 
     function exportToCSV() {
@@ -173,16 +247,17 @@
         return;
       }
 
-      let csv = "Timestamp,Station #,Counter ID,Action,24-Hr Count,48-Hr Count,Latitude,Longitude,Google Maps Link,Notes\n";
+      let csv = "Status,Station #,Counter ID,Deploy Timestamp,Deploy Maps Link,Deploy Notes,Pickup Timestamp,24-Hr Count,48-Hr Count,Pickup Maps Link,Pickup Notes\n";
+      
       logs.forEach(row => {
-        csv += `"${row.timestamp}","${row.station}","${row.id}","${row.action}","${row.count24}","${row.count48}","${row.lat}","${row.lng}","${row.mapsUrl}","${row.notes}"\n`;
+        csv += `"${row.status}","${row.station}","${row.id}","${row.deployTime}","${row.deployMapsUrl}","${row.deployNotes}","${row.pickupTime}","${row.count24}","${row.count48}","${row.pickupMapsUrl}","${row.pickupNotes}"\n`;
       });
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.setAttribute("href", url);
-      link.setAttribute("download", `counter_log_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute("download", `weekly_traffic_counts_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -191,13 +266,14 @@
     function clearData() {
       if (confirm("Are you sure you want to clear all logged data for this week?")) {
         localStorage.removeItem('counter_logs');
-        updateCount();
+        updateCounts();
+        populateActiveDropdown();
       }
     }
 
     // Initialize state on page load
-    updateCount();
-    toggleCountInputs();
+    updateCounts();
+    handleActionChange();
   </script>
 </body>
 </html>
