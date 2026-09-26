@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Counter Field Logger</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; background: #f4f6f8; margin: 0; }
+    .card { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 16px; }
+    h2 { margin-top: 0; color: #1a202c; font-size: 1.25rem; }
+    label { display: block; margin: 12px 0 4px; font-weight: 600; color: #4a5568; font-size: 0.9rem; }
+    input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
+    button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 12px; }
+    .btn-primary { background: #3182ce; color: white; }
+    .btn-success { background: #38a169; color: white; }
+    .btn-secondary { background: #e2e8f0; color: #2d3748; }
+    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-top: 8px; }
+    .count-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Counter Data Entry</h2>
+    
+    <label>Station #</label>
+    <input type="text" id="stationNum" placeholder="e.g. ST-101">
+
+    <label>Barcode / Counter ID</label>
+    <div style="display: flex; gap: 8px;">
+      <input type="text" id="counterId" placeholder="Scan or enter ID">
+      <button class="btn-secondary" style="width: auto; margin: 0;" onclick="toggleScanner()">📷 Scan</button>
+    </div>
+    <div id="reader" style="display:none;"></div>
+
+    <label>Action Type</label>
+    <select id="actionType" onchange="toggleCountInputs()">
+      <option value="Deployment">Deployment</option>
+      <option value="Pickup">Pickup</option>
+      <option value="Mid-week Check">Mid-week Check</option>
+    </select>
+
+    <!-- Dynamic Count Inputs -->
+    <div id="countsContainer" class="count-grid" style="display: none; margin-top: 8px;">
+      <div>
+        <label>24-Hr Count</label>
+        <input type="number" id="count24" placeholder="0">
+      </div>
+      <div>
+        <label>48-Hr Count</label>
+        <input type="number" id="count48" placeholder="0">
+      </div>
+    </div>
+
+    <label>Notes / Site Description</label>
+    <input type="text" id="notes" placeholder="e.g. Northbound lane near main intersection">
+
+    <button class="btn-primary" onclick="logEntry()">Save Record</button>
+  </div>
+
+  <div class="card">
+    <h2>Weekly Summary (<span id="recordCount">0</span> records)</h2>
+    <button class="btn-success" onclick="exportToCSV()">Export CSV Spreadsheet</button>
+    <button class="btn-secondary" onclick="clearData()">Clear All Data</button>
+  </div>
+
+  <script>
+    let html5QrcodeScanner = null;
+
+    function toggleScanner() {
+      const readerDiv = document.getElementById('reader');
+      if (readerDiv.style.display === 'none') {
+        readerDiv.style.display = 'block';
+        html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+        html5QrcodeScanner.render((decodedText) => {
+          document.getElementById('counterId').value = decodedText;
+          html5QrcodeScanner.clear();
+          readerDiv.style.display = 'none';
+        });
+      } else {
+        html5QrcodeScanner.clear();
+        readerDiv.style.display = 'none';
+      }
+    }
+
+    function toggleCountInputs() {
+      const action = document.getElementById('actionType').value;
+      const countsContainer = document.getElementById('countsContainer');
+      
+      if (action === 'Deployment') {
+        countsContainer.style.display = 'none';
+      } else {
+        countsContainer.style.display = 'grid';
+      }
+    }
+
+    function logEntry() {
+      const stationNum = document.getElementById('stationNum').value;
+      const counterId = document.getElementById('counterId').value;
+      const actionType = document.getElementById('actionType').value;
+      const count24 = document.getElementById('count24').value;
+      const count48 = document.getElementById('count48').value;
+      const notes = document.getElementById('notes').value;
+
+      if (!stationNum) {
+        alert("Please enter a Station #.");
+        return;
+      }
+
+      if (!counterId) {
+        alert("Please enter or scan a Counter ID.");
+        return;
+      }
+
+      // Fetch GPS Location
+      if ("geolocation" in navigator) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            saveRecord(stationNum, counterId, actionType, count24, count48, notes, position.coords.latitude, position.coords.longitude);
+          },
+          (error) => {
+            alert("GPS location unavailable or denied. Saving record without coordinates.");
+            saveRecord(stationNum, counterId, actionType, count24, count48, notes, "", "");
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      } else {
+        saveRecord(stationNum, counterId, actionType, count24, count48, notes, "", "");
+      }
+    }
+
+    function saveRecord(station, id, action, c24, c48, notes, lat, lng) {
+      const timestamp = new Date().toLocaleString();
+      const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : "";
+
+      const record = { 
+        timestamp, 
+        station,
+        id, 
+        action, 
+        count24: action === 'Deployment' ? '' : (c24 || 0), 
+        count48: action === 'Deployment' ? '' : (c48 || 0), 
+        lat, 
+        lng, 
+        mapsUrl, 
+        notes 
+      };
+
+      let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      logs.push(record);
+      localStorage.setItem('counter_logs', JSON.stringify(logs));
+
+      // Reset Form
+      document.getElementById('stationNum').value = '';
+      document.getElementById('counterId').value = '';
+      document.getElementById('count24').value = '';
+      document.getElementById('count48').value = '';
+      document.getElementById('notes').value = '';
+      updateCount();
+      alert("Entry saved successfully!");
+    }
+
+    function updateCount() {
+      const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      document.getElementById('recordCount').innerText = logs.length;
+    }
+
+    function exportToCSV() {
+      const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      if (logs.length === 0) {
+        alert("No records to export.");
+        return;
+      }
+
+      let csv = "Timestamp,Station #,Counter ID,Action,24-Hr Count,48-Hr Count,Latitude,Longitude,Google Maps Link,Notes\n";
+      logs.forEach(row => {
+        csv += `"${row.timestamp}","${row.station}","${row.id}","${row.action}","${row.count24}","${row.count48}","${row.lat}","${row.lng}","${row.mapsUrl}","${row.notes}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `counter_log_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function clearData() {
+      if (confirm("Are you sure you want to clear all logged data for this week?")) {
+        localStorage.removeItem('counter_logs');
+        updateCount();
+      }
+    }
+
+    // Initialize state on page load
+    updateCount();
+    toggleCountInputs();
+  </script>
+</body>
+</html>
