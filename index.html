@@ -11,6 +11,7 @@
     h2 { margin-top: 0; color: #1a202c; font-size: 1.25rem; }
     label { display: block; margin: 12px 0 4px; font-weight: 600; color: #4a5568; font-size: 0.9rem; }
     input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
+    input[readonly] { background-color: #edf2f7; color: #2d3748; font-weight: bold; }
     button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 12px; }
     .btn-primary { background: #3182ce; color: white; }
     .btn-success { background: #38a169; color: white; }
@@ -18,6 +19,7 @@
     #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-top: 8px; }
     .count-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .badge { background: #ebf8ff; color: #2b6cb0; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
+    .info-box { background: #eef6ff; border-left: 4px solid #3182ce; padding: 10px; border-radius: 4px; margin-top: 8px; font-size: 0.95rem; color: #2c5282; }
   </style>
 </head>
 <body>
@@ -31,25 +33,34 @@
       <option value="Pickup">Pickup</option>
     </select>
     
-    <label>Station #</label>
-    <input type="text" id="stationNum" placeholder="e.g. ST-101">
+    <!-- Station Selector / Input -->
+    <div id="stationGroup">
+      <label id="stationLabel">Station #</label>
+      <input type="text" id="stationNum" placeholder="e.g. ST-101">
+      <select id="activeStationSelect" style="display:none;" onchange="autoFillPickupFields()">
+        <option value="">-- Choose Active Station --</option>
+      </select>
+    </div>
 
-    <!-- Deployment Counter View -->
+    <!-- Deployment Counter Input with Auto-complete Datalist -->
     <div id="deployCounterGroup">
       <label>Barcode / Counter ID</label>
       <div style="display: flex; gap: 8px;">
-        <input type="text" id="counterId" placeholder="Scan or enter ID">
+        <input type="text" id="counterId" list="counterList" placeholder="Type or select ID">
+        <datalist id="counterList">
+          <!-- Sample Fleet Pre-set (60 units) -->
+          <!-- Replace/add your exact serial numbers here -->
+        </datalist>
         <button class="btn-secondary" style="width: auto; margin: 0;" onclick="toggleScanner()">📷 Scan</button>
       </div>
       <div id="reader" style="display:none;"></div>
     </div>
 
-    <!-- Pickup Dropdown View -->
-    <div id="pickupCounterGroup" style="display: none;">
-      <label>Select Active Deployment</label>
-      <select id="activeCounterSelect" onchange="autoFillPickupFields()">
-        <option value="">-- Choose Deployed Counter --</option>
-      </select>
+    <!-- Pickup Display for Counter ID -->
+    <div id="pickupCounterDisplay" style="display: none;">
+      <div class="info-box">
+        <strong>Assigned Counter ID:</strong> <span id="displayCounterId">Select a station above</span>
+      </div>
     </div>
 
     <!-- Dynamic Pickup Counts -->
@@ -80,6 +91,16 @@
   <script>
     let html5QrcodeScanner = null;
 
+    // Optional: Pre-populate datalist with 60 generic counter IDs (CNT-101 to CNT-160)
+    window.onload = function() {
+      const datalist = document.getElementById('counterList');
+      for (let i = 101; i <= 160; i++) {
+        let opt = document.createElement('option');
+        opt.value = `CNT-${i}`;
+        datalist.appendChild(opt);
+      }
+    };
+
     function toggleScanner() {
       const readerDiv = document.getElementById('reader');
       if (readerDiv.style.display === 'none') {
@@ -99,50 +120,58 @@
     function handleActionChange() {
       const action = document.getElementById('actionType').value;
       const deployGrp = document.getElementById('deployCounterGroup');
-      const pickupGrp = document.getElementById('pickupCounterGroup');
+      const pickupDisplay = document.getElementById('pickupCounterDisplay');
       const countsContainer = document.getElementById('countsContainer');
       const saveBtn = document.getElementById('saveBtn');
+      const stationInput = document.getElementById('stationNum');
+      const stationSelect = document.getElementById('activeStationSelect');
 
       if (action === 'Deployment') {
         deployGrp.style.display = 'block';
-        pickupGrp.style.display = 'none';
+        pickupDisplay.style.display = 'none';
         countsContainer.style.display = 'none';
+        stationInput.style.display = 'block';
+        stationSelect.style.display = 'none';
         saveBtn.innerText = 'Save Deployment';
-        document.getElementById('stationNum').readOnly = false;
       } else {
         deployGrp.style.display = 'none';
-        pickupGrp.style.display = 'block';
+        pickupDisplay.style.display = 'block';
         countsContainer.style.display = 'grid';
+        stationInput.style.display = 'none';
+        stationSelect.style.display = 'block';
         saveBtn.innerText = 'Save Pickup & Update Row';
-        populateActiveDropdown();
+        populateActiveStations();
       }
     }
 
-    function populateActiveDropdown() {
+    function populateActiveStations() {
       const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
-      const select = document.getElementById('activeCounterSelect');
-      select.innerHTML = '<option value="">-- Choose Deployed Counter --</option>';
+      const select = document.getElementById('activeStationSelect');
+      select.innerHTML = '<option value="">-- Choose Active Station --</option>';
 
       logs.forEach((item, index) => {
         if (item.status === 'Deployed') {
           const opt = document.createElement('option');
           opt.value = index;
-          opt.innerText = `Station: ${item.station} | Counter: ${item.id}`;
+          opt.innerText = `Station: ${item.station}`;
           select.appendChild(opt);
         }
       });
+      document.getElementById('displayCounterId').innerText = 'Select a station above';
     }
 
     function autoFillPickupFields() {
-      const selectIndex = document.getElementById('activeCounterSelect').value;
-      if (selectIndex === "") return;
+      const selectIndex = document.getElementById('activeStationSelect').value;
+      if (selectIndex === "") {
+        document.getElementById('displayCounterId').innerText = 'Select a station above';
+        return;
+      }
 
       const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
       const record = logs[selectIndex];
 
       if (record) {
-        document.getElementById('stationNum').value = record.station;
-        document.getElementById('stationNum').readOnly = true;
+        document.getElementById('displayCounterId').innerText = `${record.id} (Deployed: ${record.deployTime})`;
       }
     }
 
@@ -196,12 +225,12 @@
         logs.push(newRecord);
 
       } else if (actionType === 'Pickup') {
-        const selectIndex = document.getElementById('activeCounterSelect').value;
+        const selectIndex = document.getElementById('activeStationSelect').value;
         const count24 = document.getElementById('count24').value;
         const count48 = document.getElementById('count48').value;
 
         if (selectIndex === "") {
-          alert("Please select a counter to pick up.");
+          alert("Please select an active station for pickup.");
           return;
         }
 
@@ -217,15 +246,15 @@
 
       localStorage.setItem('counter_logs', JSON.stringify(logs));
 
+      // Reset fields
       document.getElementById('stationNum').value = '';
       document.getElementById('counterId').value = '';
       document.getElementById('count24').value = '';
       document.getElementById('count48').value = '';
       document.getElementById('notes').value = '';
-      document.getElementById('stationNum').readOnly = false;
 
       updateCounts();
-      if (actionType === 'Pickup') populateActiveDropdown();
+      if (actionType === 'Pickup') populateActiveStations();
       alert("Record saved successfully!");
     }
 
@@ -264,7 +293,7 @@
       if (confirm("Are you sure you want to clear all logged data for this week?")) {
         localStorage.removeItem('counter_logs');
         updateCounts();
-        populateActiveDropdown();
+        populateActiveStations();
       }
     }
 
