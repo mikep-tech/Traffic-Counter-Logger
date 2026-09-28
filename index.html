@@ -42,14 +42,29 @@
       </select>
     </div>
 
-    <!-- Deployment Counter Input with Auto-complete Datalist -->
+    <!-- Deployment Counter Input with Fleet Datalist -->
     <div id="deployCounterGroup">
       <label>Barcode / Counter ID</label>
       <div style="display: flex; gap: 8px;">
-        <input type="text" id="counterId" list="counterList" placeholder="Type or select ID">
+        <input type="text" id="counterId" list="counterList" placeholder="Type or select Counter ID">
         <datalist id="counterList">
-          <!-- Sample Fleet Pre-set (60 units) -->
-          <!-- Replace/add your exact serial numbers here -->
+          <!-- Pre-loaded Fleet IDs -->
+          <option value="101361"><option value="100825"><option value="100097"><option value="100543">
+          <option value="101485"><option value="103709"><option value="108771"><option value="100423">
+          <option value="100547"><option value="100542"><option value="100783"><option value="104158">
+          <option value="100419"><option value="103815"><option value="100425"><option value="100966">
+          <option value="100521"><option value="100523"><option value="100528"><option value="103772">
+          <option value="100458"><option value="101289"><option value="100417"><option value="100455">
+          <option value="100957"><option value="100794"><option value="100967"><option value="102129">
+          <option value="100495"><option value="100822"><option value="100792"><option value="103710">
+          <option value="100520"><option value="102124"><option value="100400"><option value="101184">
+          <option value="100412"><option value="100394"><option value="100388"><option value="100525">
+          <option value="100814"><option value="100602"><option value="100524"><option value="100585">
+          <option value="100438"><option value="100420"><option value="100705"><option value="104172">
+          <option value="100730"><option value="103740"><option value="100826"><option value="100549">
+          <option value="103766"><option value="100529"><option value="100392"><option value="103739">
+          <option value="100546"><option value="103769"><option value="100548"><option value="100664">
+          <option value="100522">
         </datalist>
         <button class="btn-secondary" style="width: auto; margin: 0;" onclick="toggleScanner()">📷 Scan</button>
       </div>
@@ -90,16 +105,6 @@
 
   <script>
     let html5QrcodeScanner = null;
-
-    // Optional: Pre-populate datalist with 60 generic counter IDs (CNT-101 to CNT-160)
-    window.onload = function() {
-      const datalist = document.getElementById('counterList');
-      for (let i = 101; i <= 160; i++) {
-        let opt = document.createElement('option');
-        opt.value = `CNT-${i}`;
-        datalist.appendChild(opt);
-      }
-    };
 
     function toggleScanner() {
       const readerDiv = document.getElementById('reader');
