@@ -11,7 +11,6 @@
     h2 { margin-top: 0; color: #1a202c; font-size: 1.25rem; }
     label { display: block; margin: 12px 0 4px; font-weight: 600; color: #4a5568; font-size: 0.9rem; }
     input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e0; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
-    input[readonly] { background-color: #edf2f7; color: #2d3748; font-weight: bold; }
     button { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; margin-top: 12px; }
     .btn-primary { background: #3182ce; color: white; }
     .btn-success { background: #38a169; color: white; }
@@ -19,7 +18,12 @@
     #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-top: 8px; }
     .count-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .badge { background: #ebf8ff; color: #2b6cb0; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
-    .info-box { background: #eef6ff; border-left: 4px solid #3182ce; padding: 10px; border-radius: 4px; margin-top: 8px; font-size: 0.95rem; color: #2c5282; }
+    
+    /* Readiness Badges */
+    .status-box { padding: 12px; border-radius: 8px; margin-top: 10px; font-size: 0.95rem; font-weight: 600; }
+    .status-ready { background-color: #def7ec; color: #03543f; border: 1px solid #84e1bc; }
+    .status-warn { background-color: #fdf6b2; color: #723b10; border: 1px solid #faca15; }
+    .status-wait { background-color: #fde8e8; color: #9b1c1c; border: 1px solid #f8b4b4; }
   </style>
 </head>
 <body>
@@ -48,7 +52,6 @@
       <div style="display: flex; gap: 8px;">
         <input type="text" id="counterId" list="counterList" placeholder="Type or select Counter ID">
         <datalist id="counterList">
-          <!-- Pre-loaded Fleet IDs -->
           <option value="101361"><option value="100825"><option value="100097"><option value="100543">
           <option value="101485"><option value="103709"><option value="108771"><option value="100423">
           <option value="100547"><option value="100542"><option value="100783"><option value="104158">
@@ -71,10 +74,10 @@
       <div id="reader" style="display:none;"></div>
     </div>
 
-    <!-- Pickup Display for Counter ID -->
+    <!-- Pickup Display for Counter ID & Readiness Status -->
     <div id="pickupCounterDisplay" style="display: none;">
-      <div class="info-box">
-        <strong>Assigned Counter ID:</strong> <span id="displayCounterId">Select a station above</span>
+      <div id="statusBox" class="status-box status-wait">
+        <span id="displayCounterId">Select a station above</span>
       </div>
     </div>
 
@@ -154,21 +157,35 @@
       const select = document.getElementById('activeStationSelect');
       select.innerHTML = '<option value="">-- Choose Active Station --</option>';
 
+      const now = new Date();
+
       logs.forEach((item, index) => {
         if (item.status === 'Deployed') {
+          const deployDate = new Date(item.deployIsoTime || item.deployTime);
+          const elapsedHours = (now - deployDate) / (1000 * 60 * 60);
+          
+          let tag = elapsedHours >= 48 ? '🟢 READY (48h+)' : `🟡 ${Math.floor(elapsedHours)}h elapsed`;
+
           const opt = document.createElement('option');
           opt.value = index;
-          opt.innerText = `Station: ${item.station}`;
+          opt.innerText = `Station: ${item.station} | ${tag}`;
           select.appendChild(opt);
         }
       });
-      document.getElementById('displayCounterId').innerText = 'Select a station above';
+      
+      const statusBox = document.getElementById('statusBox');
+      statusBox.className = 'status-box status-wait';
+      document.getElementById('displayCounterId').innerText = 'Select a station above to view details';
     }
 
     function autoFillPickupFields() {
       const selectIndex = document.getElementById('activeStationSelect').value;
+      const statusBox = document.getElementById('statusBox');
+      const displaySpan = document.getElementById('displayCounterId');
+
       if (selectIndex === "") {
-        document.getElementById('displayCounterId').innerText = 'Select a station above';
+        statusBox.className = 'status-box status-wait';
+        displaySpan.innerText = 'Select a station above to view details';
         return;
       }
 
@@ -176,7 +193,26 @@
       const record = logs[selectIndex];
 
       if (record) {
-        document.getElementById('displayCounterId').innerText = `${record.id} (Deployed: ${record.deployTime})`;
+        const deployDate = new Date(record.deployIsoTime || record.deployTime);
+        const now = new Date();
+        const diffMs = now - deployDate;
+        
+        const totalMinutes = Math.floor(diffMs / (1000 * 60));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        let statusText = `Counter: ${record.id}<br>Deployed: ${record.deployTime}<br>Time Elapsed: ${hours}h ${minutes}m`;
+
+        if (hours >= 48) {
+          statusBox.className = 'status-box status-ready';
+          displaySpan.innerHTML = `✅ <strong>READY FOR PICKUP (48+ hrs)</strong><br>${statusText}`;
+        } else if (hours >= 24) {
+          statusBox.className = 'status-box status-warn';
+          displaySpan.innerHTML = `⚠️ <strong>24-HR MARK REACHED (${hours}h elapsed)</strong><br>${statusText}`;
+        } else {
+          statusBox.className = 'status-box status-wait';
+          displaySpan.innerHTML = `⏳ <strong>NOT READY YET (${hours}h elapsed)</strong><br>${statusText}`;
+        }
       }
     }
 
@@ -197,7 +233,9 @@
 
     function processSave(actionType, notes, lat, lng) {
       let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
-      const timestamp = new Date().toLocaleString();
+      const now = new Date();
+      const timestamp = now.toLocaleString();
+      const isoTime = now.toISOString();
       const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : "";
 
       if (actionType === 'Deployment') {
@@ -214,6 +252,7 @@
           station: stationNum,
           id: counterId,
           deployTime: timestamp,
+          deployIsoTime: isoTime,
           deployLat: lat,
           deployLng: lng,
           deployMapsUrl: mapsUrl,
