@@ -14,6 +14,8 @@
     .btn-primary { background: #3182ce; color: white; }
     .btn-success { background: #38a169; color: white; }
     .btn-secondary { background: #e2e8f0; color: #2d3748; }
+    .btn-danger { background: #e53e3e; color: white; }
+    .btn-small { width: auto; padding: 6px 12px; font-size: 0.85rem; margin-top: 0; }
     .count-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .badge { background: #ebf8ff; color: #2b6cb0; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
     
@@ -22,6 +24,15 @@
     .status-ready { background-color: #def7ec; color: #03543f; border: 1px solid #84e1bc; }
     .status-warn { background-color: #fdf6b2; color: #723b10; border: 1px solid #faca15; }
     .status-wait { background-color: #fde8e8; color: #9b1c1c; border: 1px solid #f8b4b4; }
+
+    /* Log Item Cards */
+    .log-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-top: 10px; font-size: 0.9rem; }
+    .log-item-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 6px; }
+    .log-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+    /* Modal Styling */
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 450px; max-height: 90vh; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -32,7 +43,8 @@
     <label>Action Type</label>
     <select id="actionType" onchange="handleActionChange()">
       <option value="Deployment">Deployment</option>
-      <option value="Pickup">Pickup</option>
+      <option value="Pickup">Recorded Pickup</option>
+      <option value="Unrecorded Pickup">Unrecorded Pickup (Skipped Deploy)</option>
     </select>
     
     <!-- Station Selector / Input -->
@@ -44,7 +56,7 @@
       </select>
     </div>
 
-    <!-- Deployment Counter Input with Fleet Datalist -->
+    <!-- Counter ID Input with Fleet Datalist -->
     <div id="deployCounterGroup">
       <label>Barcode / Counter ID</label>
       <input type="text" id="counterId" list="counterList" placeholder="Type or select Counter ID">
@@ -100,6 +112,55 @@
     <button class="btn-secondary" onclick="clearData()">Clear All Data</button>
   </div>
 
+  <!-- Review & Edit Logged Entries -->
+  <div class="card">
+    <h2>Logged Records (Review & Edit)</h2>
+    <div id="recordsList">
+      <p style="font-size: 0.9rem; color: #718096;">No records logged yet.</p>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <h2>Edit Log Entry</h2>
+      <input type="hidden" id="editIndex">
+
+      <label>Status</label>
+      <select id="editStatus">
+        <option value="Deployed">Deployed</option>
+        <option value="Completed">Completed</option>
+        <option value="Completed (Unrecorded Deploy)">Completed (Unrecorded Deploy)</option>
+      </select>
+
+      <label>Station #</label>
+      <input type="text" id="editStation">
+
+      <label>Counter ID</label>
+      <input type="text" id="editCounterId">
+
+      <div class="count-grid">
+        <div>
+          <label>24-Hr Count</label>
+          <input type="number" id="editCount24">
+        </div>
+        <div>
+          <label>48-Hr Count</label>
+          <input type="number" id="editCount48">
+        </div>
+      </div>
+
+      <label>Deploy Notes</label>
+      <input type="text" id="editDeployNotes">
+
+      <label>Pickup Notes</label>
+      <input type="text" id="editPickupNotes">
+
+      <button class="btn-primary" onclick="saveModalEdit()">Save Changes</button>
+      <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+
   <script>
     function handleActionChange() {
       const action = document.getElementById('actionType').value;
@@ -117,7 +178,7 @@
         stationInput.style.display = 'block';
         stationSelect.style.display = 'none';
         saveBtn.innerText = 'Save Deployment';
-      } else {
+      } else if (action === 'Pickup') {
         deployGrp.style.display = 'none';
         pickupDisplay.style.display = 'block';
         countsContainer.style.display = 'grid';
@@ -125,6 +186,13 @@
         stationSelect.style.display = 'block';
         saveBtn.innerText = 'Save Pickup & Update Row';
         populateActiveStations();
+      } else if (action === 'Unrecorded Pickup') {
+        deployGrp.style.display = 'block';
+        pickupDisplay.style.display = 'none';
+        countsContainer.style.display = 'grid';
+        stationInput.style.display = 'block';
+        stationSelect.style.display = 'none';
+        saveBtn.innerText = 'Save Direct Pickup Record';
       }
     }
 
@@ -262,6 +330,38 @@
         logs[selectIndex].pickupLng = lng;
         logs[selectIndex].pickupMapsUrl = mapsUrl;
         logs[selectIndex].pickupNotes = notes;
+
+      } else if (actionType === 'Unrecorded Pickup') {
+        const stationNum = document.getElementById('stationNum').value;
+        const counterId = document.getElementById('counterId').value;
+        const count24 = document.getElementById('count24').value;
+        const count48 = document.getElementById('count48').value;
+
+        if (!stationNum || !counterId) {
+          alert("Please fill in both Station # and Counter ID.");
+          return;
+        }
+
+        const newRecord = {
+          status: 'Completed (Unrecorded Deploy)',
+          station: stationNum,
+          id: counterId,
+          deployTime: 'N/A',
+          deployIsoTime: '',
+          deployLat: '',
+          deployLng: '',
+          deployMapsUrl: '',
+          deployNotes: 'Deployment unrecorded in field logger',
+          pickupTime: timestamp,
+          count24: count24 || 0,
+          count48: count48 || 0,
+          pickupLat: lat,
+          pickupLng: lng,
+          pickupMapsUrl: mapsUrl,
+          pickupNotes: notes
+        };
+
+        logs.push(newRecord);
       }
 
       localStorage.setItem('counter_logs', JSON.stringify(logs));
@@ -274,6 +374,7 @@
       document.getElementById('notes').value = '';
 
       updateCounts();
+      renderRecordsList();
       if (actionType === 'Pickup') populateActiveStations();
       alert("Record saved successfully!");
     }
@@ -284,6 +385,87 @@
       
       const activeCount = logs.filter(row => row.status === 'Deployed').length;
       document.getElementById('activeCount').innerText = activeCount;
+    }
+
+    function renderRecordsList() {
+      const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      const container = document.getElementById('recordsList');
+
+      if (logs.length === 0) {
+        container.innerHTML = '<p style="font-size: 0.9rem; color: #718096;">No records logged yet.</p>';
+        return;
+      }
+
+      let html = '';
+      logs.forEach((row, index) => {
+        const countsText = row.count24 || row.count48 ? ` (24h: ${row.count24 || 0} | 48h: ${row.count48 || 0})` : '';
+        html += `
+          <div class="log-item">
+            <div class="log-item-header">
+              <span>Station: ${row.station} | Counter: ${row.id}</span>
+              <span class="badge">${row.status}</span>
+            </div>
+            <div><strong>Deployed:</strong> ${row.deployTime || 'N/A'} ${row.deployNotes ? `(${row.deployNotes})` : ''}</div>
+            <div><strong>Pickup:</strong> ${row.pickupTime || 'Pending'}${countsText}</div>
+            <div class="log-actions">
+              <button class="btn-secondary btn-small" onclick="openEditModal(${index})">✏️ Edit</button>
+              <button class="btn-danger btn-small" onclick="deleteRecord(${index})">🗑️ Delete</button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function openEditModal(index) {
+      const logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+      const row = logs[index];
+
+      document.getElementById('editIndex').value = index;
+      document.getElementById('editStatus').value = row.status;
+      document.getElementById('editStation').value = row.station;
+      document.getElementById('editCounterId').value = row.id;
+      document.getElementById('editCount24').value = row.count24 || '';
+      document.getElementById('editCount48').value = row.count48 || '';
+      document.getElementById('editDeployNotes').value = row.deployNotes || '';
+      document.getElementById('editPickupNotes').value = row.pickupNotes || '';
+
+      document.getElementById('editModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = 'none';
+    }
+
+    function saveModalEdit() {
+      const index = document.getElementById('editIndex').value;
+      let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+
+      logs[index].status = document.getElementById('editStatus').value;
+      logs[index].station = document.getElementById('editStation').value;
+      logs[index].id = document.getElementById('editCounterId').value;
+      logs[index].count24 = document.getElementById('editCount24').value;
+      logs[index].count48 = document.getElementById('editCount48').value;
+      logs[index].deployNotes = document.getElementById('editDeployNotes').value;
+      logs[index].pickupNotes = document.getElementById('editPickupNotes').value;
+
+      localStorage.setItem('counter_logs', JSON.stringify(logs));
+      closeModal();
+      updateCounts();
+      renderRecordsList();
+      populateActiveStations();
+    }
+
+    function deleteRecord(index) {
+      if (confirm("Are you sure you want to delete this record?")) {
+        let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
+        logs.splice(index, 1);
+        localStorage.setItem('counter_logs', JSON.stringify(logs));
+        updateCounts();
+        renderRecordsList();
+        populateActiveStations();
+      }
     }
 
     function exportToCSV() {
@@ -313,11 +495,13 @@
       if (confirm("Are you sure you want to clear all logged data for this week?")) {
         localStorage.removeItem('counter_logs');
         updateCounts();
+        renderRecordsList();
         populateActiveStations();
       }
     }
 
     updateCounts();
+    renderRecordsList();
     handleActionChange();
   </script>
 </body>
