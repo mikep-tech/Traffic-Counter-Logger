@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Counter Field Logger</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; background: #f4f6f8; margin: 0; }
     .card { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 16px; }
@@ -15,7 +14,6 @@
     .btn-primary { background: #3182ce; color: white; }
     .btn-success { background: #38a169; color: white; }
     .btn-secondary { background: #e2e8f0; color: #2d3748; }
-    #reader { width: 100%; border-radius: 8px; overflow: hidden; margin-top: 8px; }
     .count-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .badge { background: #ebf8ff; color: #2b6cb0; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; }
     
@@ -49,29 +47,25 @@
     <!-- Deployment Counter Input with Fleet Datalist -->
     <div id="deployCounterGroup">
       <label>Barcode / Counter ID</label>
-      <div style="display: flex; gap: 8px;">
-        <input type="text" id="counterId" list="counterList" placeholder="Type or select Counter ID">
-        <datalist id="counterList">
-          <option value="101361"><option value="100825"><option value="100097"><option value="100543">
-          <option value="101485"><option value="103709"><option value="108771"><option value="100423">
-          <option value="100547"><option value="100542"><option value="100783"><option value="104158">
-          <option value="100419"><option value="103815"><option value="100425"><option value="100966">
-          <option value="100521"><option value="100523"><option value="100528"><option value="103772">
-          <option value="100458"><option value="101289"><option value="100417"><option value="100455">
-          <option value="100957"><option value="100794"><option value="100967"><option value="102129">
-          <option value="100495"><option value="100822"><option value="100792"><option value="103710">
-          <option value="100520"><option value="102124"><option value="100400"><option value="101184">
-          <option value="100412"><option value="100394"><option value="100388"><option value="100525">
-          <option value="100814"><option value="100602"><option value="100524"><option value="100585">
-          <option value="100438"><option value="100420"><option value="100705"><option value="104172">
-          <option value="100730"><option value="103740"><option value="100826"><option value="100549">
-          <option value="103766"><option value="100529"><option value="100392"><option value="103739">
-          <option value="100546"><option value="103769"><option value="100548"><option value="100664">
-          <option value="100522">
-        </datalist>
-        <button class="btn-secondary" style="width: auto; margin: 0;" onclick="toggleScanner()">📷 Scan</button>
-      </div>
-      <div id="reader" style="display:none;"></div>
+      <input type="text" id="counterId" list="counterList" placeholder="Type or select Counter ID">
+      <datalist id="counterList">
+        <option value="101361"><option value="100825"><option value="100097"><option value="100543">
+        <option value="101485"><option value="103709"><option value="108771"><option value="100423">
+        <option value="100547"><option value="100542"><option value="100783"><option value="104158">
+        <option value="100419"><option value="103815"><option value="100425"><option value="100966">
+        <option value="100521"><option value="100523"><option value="100528"><option value="103772">
+        <option value="100458"><option value="101289"><option value="100417"><option value="100455">
+        <option value="100957"><option value="100794"><option value="100967"><option value="102129">
+        <option value="100495"><option value="100822"><option value="100792"><option value="103710">
+        <option value="100520"><option value="102124"><option value="100400"><option value="101184">
+        <option value="100412"><option value="100394"><option value="100388"><option value="100525">
+        <option value="100814"><option value="100602"><option value="100524"><option value="100585">
+        <option value="100438"><option value="100420"><option value="100705"><option value="104172">
+        <option value="100730"><option value="103740"><option value="100826"><option value="100549">
+        <option value="103766"><option value="100529"><option value="100392"><option value="103739">
+        <option value="100546"><option value="103769"><option value="100548"><option value="100664">
+        <option value="100522">
+      </datalist>
     </div>
 
     <!-- Pickup Display for Counter ID & Readiness Status -->
@@ -107,24 +101,6 @@
   </div>
 
   <script>
-    let html5QrcodeScanner = null;
-
-    function toggleScanner() {
-      const readerDiv = document.getElementById('reader');
-      if (readerDiv.style.display === 'none') {
-        readerDiv.style.display = 'block';
-        html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-        html5QrcodeScanner.render((decodedText) => {
-          document.getElementById('counterId').value = decodedText;
-          html5QrcodeScanner.clear();
-          readerDiv.style.display = 'none';
-        });
-      } else {
-        html5QrcodeScanner.clear();
-        readerDiv.style.display = 'none';
-      }
-    }
-
     function handleActionChange() {
       const action = document.getElementById('actionType').value;
       const deployGrp = document.getElementById('deployCounterGroup');
