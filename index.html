@@ -205,7 +205,7 @@
 
       logs.forEach((item, index) => {
         if (item.status === 'Deployed') {
-          const deployDate = new Date(item.deployIsoTime || item.deployTime);
+          const deployDate = new Date(item.deployIsoTime || `${item.deployDate} ${item.deployTime}`);
           const elapsedHours = (now - deployDate) / (1000 * 60 * 60);
           
           let tag = elapsedHours >= 48 ? '🟢 READY (48h+)' : `🟡 ${Math.floor(elapsedHours)}h elapsed`;
@@ -237,7 +237,7 @@
       const record = logs[selectIndex];
 
       if (record) {
-        const deployDate = new Date(record.deployIsoTime || record.deployTime);
+        const deployDate = new Date(record.deployIsoTime || `${record.deployDate} ${record.deployTime}`);
         const now = new Date();
         const diffMs = now - deployDate;
         
@@ -245,7 +245,7 @@
         const hours = Math.floor(totalMinutes / 60);
         const minutes = totalMinutes % 60;
 
-        let statusText = `Counter: ${record.id}<br>Deployed: ${record.deployTime}<br>Time Elapsed: ${hours}h ${minutes}m`;
+        let statusText = `Counter: ${record.id}<br>Deployed: ${record.deployDate} ${record.deployTime}<br>Time Elapsed: ${hours}h ${minutes}m`;
 
         if (hours >= 48) {
           statusBox.className = 'status-box status-ready';
@@ -278,9 +278,9 @@
     function processSave(actionType, notes, lat, lng) {
       let logs = JSON.parse(localStorage.getItem('counter_logs') || '[]');
       const now = new Date();
-      const timestamp = now.toLocaleString();
+      const dateStr = now.toLocaleDateString();
+      const timeStr = now.toLocaleTimeString();
       const isoTime = now.toISOString();
-      const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : "";
 
       if (actionType === 'Deployment') {
         const stationNum = document.getElementById('stationNum').value;
@@ -295,18 +295,18 @@
           status: 'Deployed',
           station: stationNum,
           id: counterId,
-          deployTime: timestamp,
+          deployDate: dateStr,
+          deployTime: timeStr,
           deployIsoTime: isoTime,
           deployLat: lat,
           deployLng: lng,
-          deployMapsUrl: mapsUrl,
           deployNotes: notes,
+          pickupDate: '',
           pickupTime: '',
           count24: '',
           count48: '',
           pickupLat: '',
           pickupLng: '',
-          pickupMapsUrl: '',
           pickupNotes: ''
         };
 
@@ -323,12 +323,12 @@
         }
 
         logs[selectIndex].status = 'Completed';
-        logs[selectIndex].pickupTime = timestamp;
+        logs[selectIndex].pickupDate = dateStr;
+        logs[selectIndex].pickupTime = timeStr;
         logs[selectIndex].count24 = count24 || 0;
         logs[selectIndex].count48 = count48 || 0;
         logs[selectIndex].pickupLat = lat;
         logs[selectIndex].pickupLng = lng;
-        logs[selectIndex].pickupMapsUrl = mapsUrl;
         logs[selectIndex].pickupNotes = notes;
 
       } else if (actionType === 'Unrecorded Pickup') {
@@ -346,18 +346,18 @@
           status: 'Completed (Unrecorded Deploy)',
           station: stationNum,
           id: counterId,
+          deployDate: 'N/A',
           deployTime: 'N/A',
           deployIsoTime: '',
           deployLat: '',
           deployLng: '',
-          deployMapsUrl: '',
           deployNotes: 'Deployment unrecorded in field logger',
-          pickupTime: timestamp,
+          pickupDate: dateStr,
+          pickupTime: timeStr,
           count24: count24 || 0,
           count48: count48 || 0,
           pickupLat: lat,
           pickupLng: lng,
-          pickupMapsUrl: mapsUrl,
           pickupNotes: notes
         };
 
@@ -405,8 +405,8 @@
               <span>Station: ${row.station} | Counter: ${row.id}</span>
               <span class="badge">${row.status}</span>
             </div>
-            <div><strong>Deployed:</strong> ${row.deployTime || 'N/A'} ${row.deployNotes ? `(${row.deployNotes})` : ''}</div>
-            <div><strong>Pickup:</strong> ${row.pickupTime || 'Pending'}${countsText}</div>
+            <div><strong>Deployed:</strong> ${row.deployDate || 'N/A'} ${row.deployTime || ''} ${row.deployNotes ? `(${row.deployNotes})` : ''}</div>
+            <div><strong>Pickup:</strong> ${row.pickupDate ? `${row.pickupDate}${row.pickupTime}` : 'Pending'}${countsText}</div>
             <div class="log-actions">
               <button class="btn-secondary btn-small" onclick="openEditModal(${index})">✏️ Edit</button>
               <button class="btn-danger btn-small" onclick="deleteRecord(${index})">🗑️ Delete</button>
@@ -475,10 +475,10 @@
         return;
       }
 
-      let csv = "Status,Station #,Counter ID,Deploy Timestamp,Deploy Maps Link,Deploy Notes,Pickup Timestamp,24-Hr Count,48-Hr Count,Pickup Maps Link,Pickup Notes\n";
+      let csv = "Status,Station #,Counter ID,Deploy Date,Deploy Time,Deploy Latitude,Deploy Longitude,Deploy Notes,Pickup Date,Pickup Time,24-Hr Count,48-Hr Count,Pickup Latitude,Pickup Longitude,Pickup Notes\n";
       
       logs.forEach(row => {
-        csv += `"${row.status}","${row.station}","${row.id}","${row.deployTime}","${row.deployMapsUrl}","${row.deployNotes}","${row.pickupTime}","${row.count24}","${row.count48}","${row.pickupMapsUrl}","${row.pickupNotes}"\n`;
+        csv += `"${row.status}","${row.station}","${row.id}","${row.deployDate || ''}","${row.deployTime || ''}","${row.deployLat || ''}","${row.deployLng || ''}","${row.deployNotes || ''}","${row.pickupDate || ''}","${row.pickupTime || ''}","${row.count24 || ''}","${row.count48 || ''}","${row.pickupLat || ''}","${row.pickupLng || ''}","${row.pickupNotes || ''}"\n`;
       });
 
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
