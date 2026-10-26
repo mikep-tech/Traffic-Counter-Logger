@@ -59,7 +59,7 @@
     <!-- Counter ID Input with Fleet Datalist -->
     <div id="deployCounterGroup">
       <label>Barcode / Counter ID</label>
-      <input type="text" id="counterId" list="counterList" placeholder="Type or select Counter ID">
+      <input type="text" id="counterId" list="counterList" inputmode="numeric" placeholder="Type or select Counter ID">
       <datalist id="counterList">
         <option value="101361"><option value="100825"><option value="100097"><option value="100543">
         <option value="101485"><option value="103709"><option value="108771"><option value="100423">
@@ -91,11 +91,11 @@
     <div id="countsContainer" class="count-grid" style="display: none; margin-top: 8px;">
       <div>
         <label>24-Hr Count</label>
-        <input type="number" id="count24" placeholder="0">
+        <input type="number" id="count24" inputmode="numeric" placeholder="0">
       </div>
       <div>
         <label>48-Hr Count</label>
-        <input type="number" id="count48" placeholder="0">
+        <input type="number" id="count48" inputmode="numeric" placeholder="0">
       </div>
     </div>
 
@@ -137,16 +137,16 @@
       <input type="text" id="editStation">
 
       <label>Counter ID</label>
-      <input type="text" id="editCounterId">
+      <input type="text" id="editCounterId" inputmode="numeric">
 
       <div class="count-grid">
         <div>
           <label>24-Hr Count</label>
-          <input type="number" id="editCount24">
+          <input type="number" id="editCount24" inputmode="numeric">
         </div>
         <div>
           <label>48-Hr Count</label>
-          <input type="number" id="editCount48">
+          <input type="number" id="editCount48" inputmode="numeric">
         </div>
       </div>
 
@@ -264,14 +264,19 @@
       const actionType = document.getElementById('actionType').value;
       const notes = document.getElementById('notes').value;
 
-      if ("geolocation" in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => { processSave(actionType, notes, position.coords.latitude, position.coords.longitude); },
-          (error) => { processSave(actionType, notes, "", ""); },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      } else {
+      if (actionType === 'Pickup') {
+        // Skip geolocation lookup for standard pickups
         processSave(actionType, notes, "", "");
+      } else {
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => { processSave(actionType, notes, position.coords.latitude, position.coords.longitude); },
+            (error) => { processSave(actionType, notes, "", ""); },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        } else {
+          processSave(actionType, notes, "", "");
+        }
       }
     }
 
@@ -281,6 +286,7 @@
       const dateStr = now.toLocaleDateString();
       const timeStr = now.toLocaleTimeString();
       const isoTime = now.toISOString();
+      const mapsUrl = lat && lng ? `https://maps.google.com/?q=${lat},${lng}` : "";
 
       if (actionType === 'Deployment') {
         const stationNum = document.getElementById('stationNum').value;
@@ -327,8 +333,6 @@
         logs[selectIndex].pickupTime = timeStr;
         logs[selectIndex].count24 = count24 || 0;
         logs[selectIndex].count48 = count48 || 0;
-        logs[selectIndex].pickupLat = lat;
-        logs[selectIndex].pickupLng = lng;
         logs[selectIndex].pickupNotes = notes;
 
       } else if (actionType === 'Unrecorded Pickup') {
@@ -397,7 +401,10 @@
       }
 
       let html = '';
-      logs.forEach((row, index) => {
+      // Loop backwards so newest record appears at the top
+      for (let i = logs.length - 1; i >= 0; i--) {
+        const row = logs[i];
+        const index = i;
         const countsText = row.count24 || row.count48 ? ` (24h: ${row.count24 || 0} | 48h: ${row.count48 || 0})` : '';
         html += `
           <div class="log-item">
@@ -406,14 +413,14 @@
               <span class="badge">${row.status}</span>
             </div>
             <div><strong>Deployed:</strong> ${row.deployDate || 'N/A'} ${row.deployTime || ''} ${row.deployNotes ? `(${row.deployNotes})` : ''}</div>
-            <div><strong>Pickup:</strong> ${row.pickupDate ? `${row.pickupDate}${row.pickupTime}` : 'Pending'}${countsText}</div>
+            <div><strong>Pickup:</strong> ${row.pickupDate ? `${row.pickupDate} ${row.pickupTime}` : 'Pending'}${countsText}</div>
             <div class="log-actions">
               <button class="btn-secondary btn-small" onclick="openEditModal(${index})">✏️ Edit</button>
               <button class="btn-danger btn-small" onclick="deleteRecord(${index})">🗑️ Delete</button>
             </div>
           </div>
         `;
-      });
+      }
 
       container.innerHTML = html;
     }
